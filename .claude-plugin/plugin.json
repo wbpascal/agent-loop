@@ -1,0 +1,6 @@
+{
+  "name": "agent-loop",
+  "version": "0.1.0",
+  "description": "One agent loop per GitHub issue: planner, executor and reviewer agents routed by the main session, with a token and cost report.",
+  "author": { "name": "Pascal Wiedenbeck" }
+}

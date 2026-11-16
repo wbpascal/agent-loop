@@ -1,0 +1,12 @@
+{
+  "name": "agent-loop",
+  "description": "Agent loop plugin",
+  "owner": { "name": "Pascal Wiedenbeck" },
+  "plugins": [
+    {
+      "name": "agent-loop",
+      "source": "./",
+      "description": "One agent loop per GitHub issue: planner, executor, reviewer."
+    }
+  ]
+}
