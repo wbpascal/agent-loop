@@ -155,7 +155,7 @@ class ReportTest(unittest.TestCase):
             with self.subTest(host=expected_host, session=expected_session):
                 d = self.run.with_name(str(n))
                 args = SimpleNamespace(dir=d, base="main", host=host, session=session)
-                with mock.patch.dict(os.environ, env, clear=True), \
+                with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(io.StringIO()), \
                      mock.patch.object(report.subprocess, "check_output", side_effect=[f"{exclude}\n", issue]) as run_cmd, \
                      mock.patch.object(report, "snapshot", return_value={"test": 1}) as snapshot:
                     report.init(args)
@@ -169,6 +169,47 @@ class ReportTest(unittest.TestCase):
                 self.assertEqual(run["sessions"][0]["id"], expected_session)
                 self.assertEqual(snapshot.call_count, int(expected_host == "claude"))
         self.assertEqual(exclude.read_bytes(), b"# existing entry\n.agent-loop/\n")
+
+    def test_init_prompt_and_resume(self):
+        exclude = self.tmp / "exclude"
+        taken = self.run.with_name("fix-parsing")
+        taken.mkdir()
+        env = {"CLAUDE_SESSION_ID": "s1"}
+
+        def init(d, side_effect, **flags):
+            buf = io.StringIO()
+            args = SimpleNamespace(**{"dir": d, "base": None, "host": None, "session": None,
+                                      "prompt": False, "resume": False, **flags})
+            with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(buf), \
+                 mock.patch.object(report.subprocess, "check_output", side_effect=side_effect) as run_cmd, \
+                 mock.patch.object(report, "snapshot", return_value=None):
+                report.init(args)
+            return buf.getvalue(), run_cmd
+
+        out, run_cmd = init(taken, ["abc123\n", f"{exclude}\n"], prompt=True)
+        d = taken.with_name("fix-parsing-2")
+        self.assertIn(f"Dir: {d.as_posix()}\nBase: abc123", out)
+        self.assertNotIn("gh", str(run_cmd.call_args_list))
+        run = json.loads((d / "run.json").read_text())
+        self.assertEqual((run["base"], run["kind"]), ("abc123", "prompt"))
+
+        (d / "task.md").write_text("Fix the parsing.")
+        with mock.patch.object(report.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+            out, _ = init(d, [f"{exclude}\n"], resume=True)
+        self.assertIn("Base: abc123", out)
+        self.assertEqual(len(json.loads((d / "run.json").read_text())["sessions"]), 2)
+        with mock.patch.object(report.subprocess, "run", return_value=SimpleNamespace(returncode=1)), \
+             self.assertRaises(SystemExit):
+            init(d, [f"{exclude}\n"], resume=True)
+
+    def test_prompt_report_heading(self):
+        d = self.run.with_name("fix-parsing")
+        d.mkdir()
+        (d / "run.json").write_text(json.dumps({"kind": "prompt", "base": "abc", "sessions": []}))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            report.report(SimpleNamespace(dir=str(d), outcome="done"))
+        self.assertIn("## Agent loop report: prompt fix-parsing", buf.getvalue())
 
 
 if __name__ == "__main__":

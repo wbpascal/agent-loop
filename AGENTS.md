@@ -1,6 +1,6 @@
 # agent-plugins
 
-One plugin for two hosts, Claude Code and GitHub Copilot (CLI and VS Code; see [ADR 0001](docs/adr/0001-one-plugin-two-hosts.md)): `/agent-loop:run <issue>` works one GitHub issue through planner, executor and reviewer agents. `README.md` describes the behaviour from the user's side. This file holds what the code does not say.
+One plugin for two hosts, Claude Code and GitHub Copilot (CLI and VS Code; see [ADR 0001](docs/adr/0001-one-plugin-two-hosts.md)): `/agent-loop:run <issue>` works one GitHub issue, `/agent-loop:run <prompt>` one typed prompt, through planner, executor and reviewer agents. `README.md` describes the behaviour from the user's side. This file holds what the code does not say.
 
 ## Where this is going
 
@@ -18,8 +18,9 @@ These were decided with the user; changing one is a design change, so raise it f
 
 - **The dispatcher carries paths, not content.** The main session spawns agents, waits, and routes on a one-line reply (`PLAN`, `GREEN`, `RED`, `BLOCKED`, `DONE`, `FIX`, `REPLAN`). It reads no plan, report or review file. This keeps it cheap enough to run on a small model.
 - **Agents never call or wait on each other.** Only the dispatcher spawns. A waiting agent's prompt cache goes cold and the next turn pays full input price. This is why there is no advisor agent: the executor returns `BLOCKED` and the dispatcher starts a fresh planner.
-- **Every agent starts fresh** and hands over through files in `.agent-loop/<issue>/` of the target repository.
+- **Every agent starts fresh** and hands over through files in `.agent-loop/<issue or slug>/` of the target repository.
 - **Only the dispatcher uses `gh` and `git push`.** The executor commits; planner and reviewer write only their own output file.
+- **A prompt run stays local.** It commits on the user's current branch, never pushes or calls `gh`, and prints its report instead of posting it. Its base is the commit SHA at the start, kept on `--resume`.
 - **One reviewer, three mandatory sections** (functionality, security, maintainability). Splitting into specialised reviewers is an open option if the security section proves shallow in practice.
 - **The reviewer reports, the executor changes code.** Large problems go to a fresh planner (`REPLAN`), small ones to the executor (`FIX`).
 - **Effort defaults live in `skills/run/SKILL.md`.** Both hosts accept per-call effort, so pass it with every spawn. Frontmatter would need three spellings (`effort`, `reasoningEffort`, `reasoning-effort`), one unverified. Models stay in frontmatter because their names differ by host.
@@ -28,6 +29,8 @@ These were decided with the user; changing one is a design change, so raise it f
 
 - Keep reply words in sync across `skills/run/SKILL.md`, the last line of each `agents/*.md`, exec and review headers (`STATUS:` / `VERDICT:`), and `report.py` (`REPLY`).
 - File names `plan-k.md`, `exec-k.md`, `review-k.md`, `pr-body.md` are shared by the skill, the agents and `report.py` (`RESULT_FILE`).
+- The task file is `issue.json` (written by `report.py init`) or `task.md` (written by the dispatcher). The agent prompt lines `Issue number:`, `Task:` and `Base:` are shared by the skill and the agents.
+- `report.py init` prints `Dir:` and `Base:`, which the skill reads in prompt mode.
 - Per-role models live in the same agent file: `model:` for Claude Code, `models:`/`modelPolicy:` for Copilot.
 - `report.py` matches Claude Code metadata `agentType` and Copilot `subagent.started` `agentName` against `ROLES`.
 

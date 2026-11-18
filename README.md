@@ -1,12 +1,12 @@
 # agent-plugins
 
-A plugin for Claude Code and GitHub Copilot (CLI and VS Code) that runs one agent loop on one GitHub issue:
+A plugin for Claude Code and GitHub Copilot (CLI and VS Code) that runs one agent loop on one task, a GitHub issue or a prompt:
 
 ```
 planner -> executor -> reviewer -> DONE | FIX | REPLAN
 ```
 
-The session that invokes the skill is the dispatcher: it spawns the three agents one at a time, routes on their one-line reply, and is the only one that runs `gh` and `git push`. Agents start fresh and hand over through files in `.agent-loop/<issue>/`.
+The session that invokes the skill is the dispatcher: it spawns the three agents one at a time, routes on their one-line reply, and is the only one that runs `gh` and `git push`. Agents start fresh and hand over through files in `.agent-loop/<issue or slug>/`.
 
 ## Use
 
@@ -50,13 +50,24 @@ To override the executor, pass a model supported by your host, e.g. `/agent-loop
 
 Effort defaults to `medium` for `--planner-effort` and `--executor-effort`, and `high` for `--reviewer-effort`. For example: `/agent-loop:run 42 --planner-effort high --executor-effort low --reviewer-effort medium`. Values are passed through unchanged, so the host may reject a level its model does not support. On Claude Code, `CLAUDE_CODE_EFFORT_LEVEL` overrides all three.
 
+### From a prompt
+
+Instead of an issue number, give the task as text. Flags go before it:
+
+```
+/agent-loop:run --max-passes 5 add a --dry-run flag to the import command
+```
+
+A prompt run needs only a clean tree, not `gh` or a remote. It commits directly on your current branch, opens no PR and posts nothing. At the end the dispatcher prints the report, the commit the run started from (`git reset --hard <sha>` undoes the run) and, on `DONE`, the reviewer's `pr-body.md` for a PR you open yourself. The run lives in `.agent-loop/<slug>/`, where the slug is a short summary of the prompt. Continue an unfinished one with `/agent-loop:run --resume <slug>` from the same branch.
+
 ## What a run does
 
-1. Creates `agent/issue-<N>` from the current branch.
+1. Creates `agent/issue-<N>` from the current branch (issue only; a prompt run stays on the current branch).
 2. Planner writes `plan-k.md`; executor implements, tests and commits, writing `exec-k.md`; reviewer reviews the whole branch for functionality, security and maintainability, writing `review-k.md`.
 3. Reviewer verdict routes the loop: `FIX` back to the executor, `REPLAN` to a fresh planner, `DONE` ends it. An executor that cannot follow the plan returns `BLOCKED`, which also goes to a fresh planner.
-4. `DONE`: pushes the branch, opens a PR against the branch you started from, and posts the report as a PR comment.
+4. `DONE` on an issue: pushes the branch, opens a PR against the branch you started from, and posts the report as a PR comment.
 5. `--max-passes` executor calls used up (default 3), or an agent failing twice: no PR, branch stays local, report goes to the issue as a comment.
+6. A prompt run ends the same three ways, but only prints the report and saves it as `report.md`.
 
 `.agent-loop/` is added to `.git/info/exclude`, so the target repository's `.gitignore` is untouched. The files stay after the run for you to study.
 

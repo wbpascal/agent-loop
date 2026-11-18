@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bookkeeping for /agent-loop:run.
 
-init    prepare the issue directory and record the run start in <dir>/run.json
+init    prepare the task directory and record the run start in <dir>/run.json
 report  generate the markdown token/cost report from the host's transcripts
 """
 import argparse
@@ -104,16 +104,38 @@ def init(a):
     if not session or not re.fullmatch(r"[a-zA-Z0-9_-]+", session):
         raise SystemExit(f"Set {SESSION_ENV[host]} or pass a valid --session.")
     d = Path(a.dir)
-    if not re.fullmatch(r"[0-9]+", d.name):
+    prompt, resume = getattr(a, "prompt", False), getattr(a, "resume", False)
+    if prompt or resume:
+        if not re.fullmatch(r"(?=.*[a-z])[a-z0-9-]{1,40}(-[0-9]+)?", d.name):
+            raise SystemExit("--dir must end with a slug: a-z, 0-9 and -, at most 40 characters.")
+    elif not re.fullmatch(r"[0-9]+", d.name):
         raise SystemExit("--dir must end with the issue number.")
+    elif not a.base:
+        raise SystemExit("--base is required for an issue.")
+    if prompt:
+        name, n = d.name, 1
+        while d.exists():
+            n += 1
+            d = d.with_name(f"{name}-{n}")
     f = d / "run.json"
+    if resume and not (f.exists() and (d / "task.md").exists()):
+        raise SystemExit(f"No prompt run to resume in {d}.")
     run = json.loads(f.read_text()) if f.exists() else {"sessions": [], "host": host}
     if run.get("host", "claude") != host:
         raise SystemExit("Existing run uses a different host.")
     start = datetime.now(timezone.utc).isoformat()
+    if prompt:
+        base = subprocess.check_output(["git", "rev-parse", "HEAD"], encoding="utf-8").strip()
+    elif resume:
+        base = run["base"]
+        if subprocess.run(["git", "merge-base", "--is-ancestor", base, "HEAD"]).returncode != 0:
+            raise SystemExit(f"Base {base} is not an ancestor of HEAD; switch to the branch that holds the run.")
+    else:
+        base = a.base
     exclude = Path(subprocess.check_output(["git", "rev-parse", "--git-path", "info/exclude"],
                                            encoding="utf-8").rstrip("\r\n"))
-    issue = subprocess.check_output(["gh", "issue", "view", d.name, "--json", "number,title,body,comments,labels"])
+    issue = None if prompt or resume else \
+        subprocess.check_output(["gh", "issue", "view", d.name, "--json", "number,title,body,comments,labels"])
     contents = exclude.read_bytes() if exclude.exists() else b""
     if b".agent-loop/" not in contents.splitlines():
         exclude.parent.mkdir(parents=True, exist_ok=True)
@@ -122,12 +144,14 @@ def init(a):
                 fp.write(b"\n")
             fp.write(b".agent-loop/\n")
     d.mkdir(parents=True, exist_ok=True)
-    (d / "issue.json").write_bytes(issue)
-    run.update(host=host, base=a.base)
+    if issue is not None:
+        (d / "issue.json").write_bytes(issue)
+    run.update(host=host, base=base, kind="issue" if issue is not None else "prompt")
     run["sessions"].append({"id": session, "start": start})
     if host == "claude":
         run["rate_limits"] = snapshot()
     f.write_text(json.dumps(run, indent=2))
+    print(f"Dir: {d.as_posix()}\nBase: {base}")
 
 
 def collect(run, prices):
@@ -274,7 +298,8 @@ def report(a):
     columns = ["Input", "Cache write", "Cache read", "Output"] + (["Reasoning", "Premium requests"] if copilot else ["Cost"])
     agents = [c for c in calls if c["role"] != "dispatcher"]
 
-    out = [f"## Agent loop report: issue #{d.resolve().name}", "", f"**Outcome:** {a.outcome}", "", "### Timeline", ""]
+    title = f"issue #{d.resolve().name}" if run.get("kind", "issue") == "issue" else f"prompt {d.resolve().name}"
+    out = [f"## Agent loop report: {title}", "", f"**Outcome:** {a.outcome}", "", "### Timeline", ""]
     seen, rows = {}, []
     i = 0
     for c in calls if copilot else agents:
@@ -315,7 +340,7 @@ def report(a):
     out.append(f"Total: {price}, {n:,} tokens, {len(agents)} agent calls, outcome {a.outcome}")
     if getattr(a, "out", None):
         Path(a.out).write_text("\n".join(out) + "\n", encoding="utf-8")
-        print(out[-1])
+        print("\n".join(out) if getattr(a, "print", False) else out[-1])
     else:
         print("\n".join(out))
 
@@ -327,12 +352,16 @@ if __name__ == "__main__":
     i.add_argument("--dir", required=True)
     i.add_argument("--session")
     i.add_argument("--host", choices=SESSION_ENV)
-    i.add_argument("--base", required=True)
+    i.add_argument("--base")
+    mode = i.add_mutually_exclusive_group()
+    mode.add_argument("--prompt", action="store_true", help="new prompt run: --dir ends with a slug, base is HEAD")
+    mode.add_argument("--resume", action="store_true", help="resume a prompt run, keeping its base")
     i.set_defaults(fn=init)
     r = sub.add_parser("report")
     r.add_argument("--dir", required=True)
     r.add_argument("--outcome", required=True)
     r.add_argument("--out")
+    r.add_argument("--print", action="store_true", help="with --out, print the whole report, not just the total")
     r.set_defaults(fn=report)
     args = p.parse_args()
     args.fn(args)
