@@ -60,9 +60,21 @@ Instead of an issue number, give the task as text. Flags go before it:
 
 A prompt run needs only a clean tree, not `gh` or a remote. It commits directly on your current branch, opens no PR and posts nothing. At the end the dispatcher prints the report, the commit the run started from (`git reset --hard <sha>` undoes the run) and, on `DONE`, the reviewer's `pr-body.md` for a PR you open yourself. The run lives in `.agent-loop/<slug>/`, where the slug is a short summary of the prompt. Continue an unfinished one with `/agent-loop:run --resume <slug>` from the same branch.
 
+### In a worktree
+
+An issue run works in its own git worktree, so your checkout stays untouched and several runs can go in parallel. Pass `--in-place` for the old behaviour, or `--worktree` to isolate a prompt run on a branch `agent/<slug>`. Uncommitted changes in your checkout are not part of the run; the dispatcher warns about them.
+
+The session you invoke creates the worktree and hands off to a fresh dispatcher inside it:
+
+- **In Herdr**: the worktree goes where Herdr's New worktree dialog puts it (`worktrees.directory`, default `~/.herdr/worktrees/<repo>/<branch>`) and the run starts in a new space. A resumed run opens a tab in that space.
+- **Claude Code elsewhere**: the worktree is `../<repo>.worktrees/<branch>` and the session moves into it.
+- **Copilot elsewhere**: same path; the dispatcher prints the `cd … && copilot -i …` command for you to run.
+
+Resume a worktree run from anywhere with the same command; the dispatcher finds its worktree. Worktrees are never removed for you, so you can come back with feedback; the final message gives the `git worktree remove` command.
+
 ## What a run does
 
-1. Creates `agent/issue-<N>` from the current branch (issue only; a prompt run stays on the current branch).
+1. Creates `agent/issue-<N>` from the current branch, in a worktree unless `--in-place` (issue only; a prompt run stays on the current branch unless `--worktree`).
 2. Planner writes `plan-k.md`; executor implements, tests and commits, writing `exec-k.md`; reviewer reviews the whole branch for functionality, security and maintainability, writing `review-k.md`.
 3. Reviewer verdict routes the loop: `FIX` back to the executor, `REPLAN` to a fresh planner, `DONE` ends it. An executor that cannot follow the plan returns `BLOCKED`, which also goes to a fresh planner.
 4. `DONE` on an issue: pushes the branch, opens a PR against the branch you started from, and posts the report as a PR comment.

@@ -202,6 +202,52 @@ class ReportTest(unittest.TestCase):
              self.assertRaises(SystemExit):
             init(d, [f"{exclude}\n"], resume=True)
 
+    def test_worktree(self):
+        import subprocess
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name).resolve() / "proj"
+        repo.mkdir()
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.check_call(git + ["init", "-q", "-b", "main"], cwd=repo)
+        subprocess.check_call(git + ["commit", "-q", "--allow-empty", "-m", "x"], cwd=repo)
+        cwd = os.getcwd()
+        os.chdir(repo)
+        self.addCleanup(os.chdir, cwd)
+
+        def worktree(branch, base=None, env=None):
+            buf = io.StringIO()
+            with mock.patch.dict(os.environ, env or {}), contextlib.redirect_stdout(buf):
+                report.worktree(SimpleNamespace(branch=branch, base=base))
+            return buf.getvalue()
+
+        env = {"HC_TERMINAL_SOCKET": ""}
+        out = worktree("agent/issue-7", "main", env)
+        path = repo.parent / "proj.worktrees" / "agent-issue-7"
+        self.assertEqual(out, f"Worktree: {path.as_posix()}\nHerdr: no\n")
+        self.assertEqual(worktree("agent/issue-7", env=env), out)  # resume finds it
+        with self.assertRaises(SystemExit):
+            worktree("agent/missing", env=env)
+
+        home = repo.parent / "herdr"
+        home.mkdir()
+        (home / "settings.json").write_text(json.dumps({"worktrees": {"directory": str(repo.parent / "wt")}}))
+        herdr = repo.parent / "wt" / "proj" / "agent-fix"
+        ls = json.dumps({"spaces": [{"id": "sp1", "folder": str(herdr)}]})
+        real = subprocess.check_output
+        with mock.patch.object(report.subprocess, "check_output",
+                               side_effect=lambda cmd, **kw: ls if cmd[0] == "herdr-app" else real(cmd, **kw)):
+            out = worktree("agent/fix", "HEAD", {"HC_TERMINAL_SOCKET": "s", "HERDR_APP_HOME": str(home)})
+        self.assertEqual(out, f"Worktree: {herdr.as_posix()}\nHerdr: yes\nSpace: sp1\n")
+
+        os.chdir(path)
+        d = Path(".agent-loop/7")
+        with mock.patch.dict(os.environ, {"CLAUDE_SESSION_ID": "s1"}, clear=True), \
+             mock.patch.object(report.subprocess, "check_output", side_effect=[f"{repo}/.git/info/exclude\n", b"{}"]), \
+             mock.patch.object(report, "snapshot", return_value=None), contextlib.redirect_stdout(io.StringIO()) as buf:
+            report.init(SimpleNamespace(dir=d, base="main", host=None, session=None))
+        self.assertIn(f"Worktree: {path.as_posix()}", buf.getvalue())
+
     def test_prompt_report_heading(self):
         d = self.run.with_name("fix-parsing")
         d.mkdir()

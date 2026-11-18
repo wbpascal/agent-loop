@@ -1,7 +1,7 @@
 ---
 name: run
 description: Run one agent loop (planner, executor, reviewer) on a GitHub issue or a prompt until the reviewer says done.
-argument-hint: [flags] <issue-number> | <prompt> | --resume <slug>   flags: --executor <model> --planner-effort E --executor-effort E --reviewer-effort E --max-passes N
+argument-hint: [flags] <issue-number> | <prompt> | --resume <slug>   flags: --worktree --in-place --executor <model> --planner-effort E --executor-effort E --reviewer-effort E --max-passes N
 disable-model-invocation: true
 ---
 
@@ -16,6 +16,8 @@ Flags come first:
 - `--executor-effort <E>`: executor effort. Default `medium`.
 - `--reviewer-effort <E>`: reviewer effort. Default `high`.
 - `--max-passes <P>`: maximum executor calls. Default 3.
+- `--worktree` / `--in-place`: run in a git worktree on the run's own branch, or in this checkout. Default: worktree for an issue, in place for a prompt.
+- `--base <branch>`: issue mode, the PR base. Set by the handoff below; otherwise the current branch.
 
 After the flags, the task:
 
@@ -25,30 +27,42 @@ After the flags, the task:
 
 You are the **dispatcher**. Three agents do all reading, thinking and coding. You spawn them one at a time, route on their one-line reply, and run `git` and `gh`. You carry paths, not content: every file under `D` stays unread by you, because the reply line already holds everything routing needs.
 
-Substitute placeholders. Issue mode: `D` is `.agent-loop/N`, `ID` is `#N`. Prompt mode: `D` and `BASE` are the `Dir:` and `Base:` lines printed by `REPORT init`, `ID` is the last part of `D`. `REPORT` is `python "${CLAUDE_PLUGIN_ROOT}/scripts/report.py"` (use `python3` if that is your Python 3 command; if `${CLAUDE_PLUGIN_ROOT}` is not filled in, the plugin root is two levels above this skill's base directory).
+Substitute placeholders. Issue mode: `D` is `.agent-loop/N`, `ID` is `#N`. Prompt mode: `D` and `BASE` are the `Dir:` and `Base:` lines printed by `REPORT init`, `ID` is the last part of `D`. `WT` is the `Worktree:` line printed by `REPORT init`, if any. `REPORT` is `python "${CLAUDE_PLUGIN_ROOT}/scripts/report.py"` (use `python3` if that is your Python 3 command; if `${CLAUDE_PLUGIN_ROOT}` is not filled in, the plugin root is two levels above this skill's base directory).
 
 ## 1. Preflight
 
-Stop and tell the user which check failed. Both modes: `git status --porcelain` prints nothing.
+Stop and tell the user which check failed. In place: `git status --porcelain` prints nothing. In a worktree: if it prints anything, warn the user that those changes are not part of the run.
 
 Issue mode:
 
 - `gh issue view N --json state -q .state` prints `OPEN`.
-- `BASE` = `git branch --show-current`, and `git ls-remote --heads origin BASE` finds it (it becomes the PR base).
-- Branch `agent/issue-N` exists neither locally nor on origin. If it exists, ask the user: resume or abort. Resume means `git switch agent/issue-N`, keep the files in `D`, continue their numbering, and enter the loop at the planner with the newest review or exec report as extra input.
+- `BASE` = `--base` or else `git branch --show-current`, and `git ls-remote --heads origin BASE` finds it (it becomes the PR base).
+- If the current branch is `agent/issue-N` (a handoff landed here), skip this check and `git switch -c` below; if `D/run.json` exists, resume. Otherwise branch `agent/issue-N` exists neither locally nor on origin. If it exists, ask the user: resume or abort. Resume means keep the files in `D`, continue their numbering, and enter the loop at the planner with the newest review or exec report as extra input; in place, first `git switch agent/issue-N`.
 
-Then run in order, stopping on failure:
+Prompt mode: choose `SLUG`, a summary of the prompt in at most 40 characters of `a-z`, `0-9` and `-`; on a branch `agent/X`, `SLUG` is `X`. A `--resume <slug>` runs in a worktree when branch `agent/<slug>` exists and `--in-place` was not given.
+
+### Worktree handoff
+
+In a worktree run, do this before anything below. `B` is `agent/issue-N` or `agent/SLUG`. Run `REPORT worktree --branch B --base START`, with `START` = `BASE` for an issue and `HEAD` for a new prompt run; omit `--base` when `B` exists. It prints `Worktree: P`, `Herdr: yes|no`, and `Space: S` when a Herdr space already shows `P`. `CMD` is `/agent-loop:run --in-place`, then `--base BASE` (issue mode), the other flags, and the task (`N`, the prompt or `--resume <slug>`), escaped for the shell. Then:
+
+- `Herdr: yes`: `herdr-app do space.new --folder P --argv '["claude"]' --task 'CMD'` (`["copilot"]` on Copilot); with `Space: S`, `tab.new --space S` instead of `space.new`. Tell the user the run continues in the worktree `P`, and end.
+- Claude Code: enter `P` with `EnterWorktree` (`path`) and continue as if invoked with `CMD`.
+- Copilot: tell the user to run `cd P && copilot -i "CMD"`, and end.
+
+### Start
+
+Issue mode, run in order, stopping on failure:
 
 ```text
 REPORT init --dir D --base BASE --session=${CLAUDE_SESSION_ID}
 git switch -c agent/issue-N
 ```
 
-Prompt mode, new run: choose `SLUG`, a summary of the prompt in at most 40 characters of `a-z`, `0-9` and `-`. Run `REPORT init --dir .agent-loop/SLUG --prompt --session=${CLAUDE_SESSION_ID}`, then write the prompt verbatim to `D/task.md` with your file-writing tool.
+Prompt mode, new run: run `REPORT init --dir .agent-loop/SLUG --prompt --session=${CLAUDE_SESSION_ID}`, then write the prompt verbatim to `D/task.md` with your file-writing tool.
 
 Prompt mode, resume: run `REPORT init --dir .agent-loop/<slug> --resume --session=${CLAUDE_SESSION_ID}`. Keep the files in `D`, continue their numbering, and enter the loop at the planner with the newest review or exec report as extra input.
 
-Prompt mode works on the current branch: no new branch, no `gh`, no push.
+Prompt mode works on the current branch: no `gh`, no push.
 
 Done when `D/run.json` and the task file exist, and in issue mode the current branch is `agent/issue-N`.
 
@@ -90,7 +104,7 @@ git push -u origin agent/issue-N
 gh pr create --base BASE --head agent/issue-N --title '<issue title> (#N)' --body-file D/pr-body.md
 REPORT report --dir D --outcome done --out D/report.md
 gh pr comment PR_URL --body-file D/report.md
-git switch BASE
+git switch BASE   (skip when WT is set)
 ```
 
 Issue mode, outcome `cap` or `aborted` (branch stays local, for the user to inspect):
@@ -104,4 +118,4 @@ Get the issue title with `gh issue view N --json title -q .title`; escape it for
 
 Prompt mode, every outcome: run `REPORT report --dir D --outcome OUTCOME --out D/report.md --print`. The commits stay on the current branch.
 
-Done when the report is posted (issue mode) or printed (prompt mode). Tell the user the outcome and the total line printed by `REPORT report`. Issue mode: add the PR URL if any. Prompt mode: first repeat the whole printed report, then add `BASE` with `git reset --hard BASE` as the way to undo the run, and on `done` the path `D/pr-body.md`.
+Done when the report is posted (issue mode) or printed (prompt mode). Tell the user the outcome and the total line printed by `REPORT report`. Issue mode: add the PR URL if any. When `WT` is set, add `WT` and `git worktree remove WT` to clean up once the user is done with it. Prompt mode: first repeat the whole printed report, then add `BASE` with `git reset --hard BASE` as the way to undo the run, and on `done` the path `D/pr-body.md`.

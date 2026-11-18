@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Bookkeeping for /agent-loop:run.
 
-init    prepare the task directory and record the run start in <dir>/run.json
+init      prepare the task directory and record the run start in <dir>/run.json
+worktree  find or create the git worktree for a run branch
 report  generate the markdown token/cost report from the host's transcripts
 """
 import argparse
@@ -152,6 +153,49 @@ def init(a):
         run["rate_limits"] = snapshot()
     f.write_text(json.dumps(run, indent=2))
     print(f"Dir: {d.as_posix()}\nBase: {base}")
+    # A linked worktree's .git is a file pointing into the main repository's .git/worktrees/.
+    dotgit = Path(".git")
+    if dotgit.is_file() and "/worktrees/" in dotgit.read_text().replace("\\", "/"):
+        print(f"Worktree: {Path.cwd().as_posix()}")
+
+
+def herdr_root():
+    home = Path(os.environ.get("HERDR_APP_HOME") or Path.home() / ".config" / "herdr-app")
+    try:
+        root = json.loads((home / "settings.json").read_text())["worktrees"]["directory"]
+    except (OSError, ValueError, KeyError, TypeError):
+        root = "~/.herdr/worktrees"
+    return Path(root).expanduser()
+
+
+def worktree(a):
+    listing = subprocess.check_output(["git", "worktree", "list", "--porcelain"], encoding="utf-8")
+    trees = [dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
+             for block in listing.strip().split("\n\n")]
+    ref = f"refs/heads/{a.branch}"
+    herdr = bool(os.environ.get("HC_TERMINAL_SOCKET"))
+    path = next((t["worktree"] for t in trees if t.get("branch") == ref), None)
+    if path is None:
+        main = Path(trees[0]["worktree"])
+        # Same layout as Herdr's New worktree dialog, so the space nests under its repo.
+        leaf = a.branch.replace("/", "-")
+        path = str((herdr_root() / main.name if herdr else main.parent / f"{main.name}.worktrees") / leaf)
+        if subprocess.run(["git", "show-ref", "--verify", "--quiet", ref]).returncode == 0:
+            add = ["git", "worktree", "add", path, a.branch]
+        elif a.base:
+            add = ["git", "worktree", "add", "-b", a.branch, path, a.base]
+        else:
+            raise SystemExit(f"Branch {a.branch} does not exist; pass --base.")
+        subprocess.check_call(add, stdout=subprocess.DEVNULL)
+    print(f"Worktree: {Path(path).as_posix()}\nHerdr: {'yes' if herdr else 'no'}")
+    if herdr:
+        try:
+            spaces = json.loads(subprocess.check_output(["herdr-app", "ls"], encoding="utf-8"))["spaces"]
+        except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+            spaces = []
+        space = next((s["id"] for s in spaces if s.get("folder") and Path(s["folder"]) == Path(path)), None)
+        if space:
+            print(f"Space: {space}")
 
 
 def collect(run, prices):
@@ -357,6 +401,10 @@ if __name__ == "__main__":
     mode.add_argument("--prompt", action="store_true", help="new prompt run: --dir ends with a slug, base is HEAD")
     mode.add_argument("--resume", action="store_true", help="resume a prompt run, keeping its base")
     i.set_defaults(fn=init)
+    w = sub.add_parser("worktree")
+    w.add_argument("--branch", required=True)
+    w.add_argument("--base", help="start point when the branch does not exist yet")
+    w.set_defaults(fn=worktree)
     r = sub.add_parser("report")
     r.add_argument("--dir", required=True)
     r.add_argument("--outcome", required=True)

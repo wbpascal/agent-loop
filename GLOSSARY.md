@@ -23,3 +23,11 @@ _Avoid_: result, status
 **Report**:
 The timeline and cost summary produced when a run ends, measured in the host's own cost unit. An issue's report is posted as a comment; a prompt's report is shown to the user.
 _Avoid_: summary, metrics
+
+**Worktree**:
+A separate checkout of the target repository on the run's own branch, so the user's checkout stays untouched and runs can go in parallel. An issue run uses one by default; a prompt run works in place unless asked. In Herdr it is a Herdr worktree, shown as its own space.
+_Avoid_: sandbox, clone, copy
+
+**Handoff**:
+The invoking session creates the worktree, starts a fresh dispatcher inside it, and steps back. The new session is the run's dispatcher.
+_Avoid_: relaunch, fork
