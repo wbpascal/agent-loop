@@ -2,6 +2,8 @@
 name: planner
 description: Agent-loop planner. Turns a GitHub issue into an implementation plan file. Spawned by /agent-loop:run.
 model: fable
+models: [gpt-6.2-astra, claude-opus-5.5]
+modelPolicy: required
 tools: Read, Grep, Glob, Bash, Write
 ---
 

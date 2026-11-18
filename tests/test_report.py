@@ -1,11 +1,13 @@
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import report  # noqa: E402
@@ -24,7 +26,10 @@ def usage(inp, out, read=0, w5=0, w1=0):
 
 class ReportTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
+        temp = tempfile.TemporaryDirectory(dir=".")
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.addCleanup(setattr, report, "CONFIG", report.CONFIG)
         report.CONFIG = self.tmp
         self.proj = self.tmp / "projects" / "p"
         self.sub = self.proj / "sess" / "subagents"
@@ -75,6 +80,92 @@ class ReportTest(unittest.TestCase):
             "five_hour": {"used_percentage": 30, "resets_at": 2}, "seven_day": {"used_percentage": 12.5, "resets_at": 9}}}))
         before = {"five_hour": {"used_percentage": 90, "resets_at": 1}, "seven_day": {"used_percentage": 10, "resets_at": 9}}
         self.assertEqual(report.plan_usage(before), ["7d +2.5%"])
+
+    def test_copilot_report(self):
+        def event(time, kind, agent=None, **data):
+            e = {"type": kind, "timestamp": f"2026-01-01T{time}Z", "data": data}
+            if agent:
+                e["agentId"] = agent
+            return json.dumps(e)
+
+        log = self.tmp / "session-state" / "sess" / "events.jsonl"
+        log.parent.mkdir(parents=True)
+        log.write_text("\n".join([
+            event("09:59:58", "tool.execution_start", toolName="task", toolCallId="old"),
+            event("09:59:59", "session.usage_record", usage={"inputTokens": 9999, "cost": 100}),
+            event("10:00:00", "subagent.started", "old", agentName="planner", toolCallId="old"),
+            event("10:00:01", "session.usage_record", usage={"model": "claude-haiku-5.5", "inputTokens": 100,
+                                                              "cacheReadTokens": 75, "outputTokens": 10, "cost": 0.25}),
+            event("10:01:00", "tool.execution_start", toolName="task", toolCallId="p"),
+            event("10:01:01", "subagent.started", "a", agentName="agent-loop:planner", toolCallId="p", model="gpt-6.2-astra"),
+            event("10:01:20", "session.usage_record", "a", usage={"parentToolCallId": "p", "initiator": "sub-agent",
+                  "inputTokens": 200, "cacheReadTokens": 120, "cacheWriteTokens": 50, "outputTokens": 20,
+                  "reasoningTokens": 5, "cost": 1}),
+            event("10:01:50", "session.usage_record", "a", usage={"inputTokens": 10, "outputTokens": 2, "cost": 0.5}),
+            event("10:02:05", "tool.execution_complete", toolCallId="p", success=True,
+                  result={"content": "Agent replied:\r\nPLAN .agent-loop/42/plan-1.md\r\n"}),
+            event("10:02:56", "subagent.started", "x", agentName="research", toolCallId="other"),
+            event("10:02:57", "session.usage_record", "x", usage={"parentToolCallId": "other", "inputTokens": 9999, "cost": 100}),
+            event("10:03:00", "tool.execution_start", toolName="task", toolCallId="e"),
+            event("10:03:01", "subagent.started", "b", agentName="executor", toolCallId="e", model="gpt-6.2-sol",
+                  executionMode="background"),
+            event("10:03:02", "tool.execution_complete", toolCallId="e", success=True, result={"content": "Background agent started"}),
+            event("10:03:40", "session.usage_record", "b", usage={"parentToolCallId": "e", "inputTokens": 30,
+                                                                  "outputTokens": 18, "reasoningTokens": 8, "cost": 2}),
+            event("10:04:03", "subagent.completed", "b", toolCallId="e", durationMs=62000),
+            event("10:05:00", "session.usage_checkpoint", accountingSnapshot={"totalPremiumRequestCost": 999}),
+            "{incomplete",
+        ]), encoding="utf-8")
+        run_file = self.run / "run.json"
+        run = json.loads(run_file.read_text())
+        run_file.write_text(json.dumps({**run, "host": "copilot"}))
+        (self.run / "exec-1.md").write_text("STATUS: GREEN\n")
+        path = self.run / "report.md"
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, COPILOT_HOME=str(self.tmp)), contextlib.redirect_stdout(buf), \
+             mock.patch.object(report, "PRICES", self.tmp / "missing.json"), \
+             mock.patch.object(report, "plan_usage", side_effect=AssertionError("Claude only")):
+            report.report(SimpleNamespace(dir=str(self.run), outcome="cap", out=path))
+        out = path.read_text(encoding="utf-8")
+        self.assertIn("| 1 | planner 1 | gpt-6.2-astra | 10:01:00 | 1m 05s | PLAN .agent-loop/42/plan-1.md | 40 | 50 | 120 | 22 | 5 | 1.5 |", out)
+        self.assertIn("| 2 | executor 1 | gpt-6.2-sol | 10:03:00 | 1m 03s | GREEN | 30 | 0 | 0 | 18 | 8 | 2 |", out)
+        self.assertIn("| dispatcher | - | 25 | 0 | 75 | 10 | 0 | 0.25 |", out)
+        self.assertIn("| **Total** | 2 | 95 | 50 | 195 | 50 | 13 | 3.75 |", out)
+        self.assertEqual(buf.getvalue().strip(), "Total: 3.75 premium requests, 390 tokens, 2 agent calls, outcome cap")
+        self.assertTrue(out.endswith(buf.getvalue()))
+
+    def test_init_detects_host_and_session(self):
+        cases = [
+            ({"CLAUDE_SESSION_ID": "claude-id"}, None, None, "claude", "claude-id"),
+            ({"COPILOT_AGENT_SESSION_ID": "copilot-id"}, None, None, "copilot", "copilot-id"),
+            ({"CLAUDE_SESSION_ID": "claude-id"}, "copilot", "override", "copilot", "override"),
+            ({}, None, "override", "claude", "override"),
+            ({"COPILOT_AGENT_SESSION_ID": "copilot-id"}, None, "", "copilot", "copilot-id"),
+            ({"COPILOT_AGENT_SESSION_ID": "copilot-id"}, None, "${CLAUDE_SESSION_ID}", "copilot", "copilot-id"),
+            ({"COPILOT_AGENT_SESSION_ID": "copilot-id"}, None, "claude-id", "claude", "claude-id"),
+        ]
+        exclude = self.tmp / "git info" / "exclude"
+        exclude.parent.mkdir()
+        exclude.write_bytes(b"# existing entry")
+        issue = b'{"number":43}'
+        for n, (env, host, session, expected_host, expected_session) in enumerate(cases, 43):
+            with self.subTest(host=expected_host, session=expected_session):
+                d = self.run.with_name(str(n))
+                args = SimpleNamespace(dir=d, base="main", host=host, session=session)
+                with mock.patch.dict(os.environ, env, clear=True), \
+                     mock.patch.object(report.subprocess, "check_output", side_effect=[f"{exclude}\n", issue]) as run_cmd, \
+                     mock.patch.object(report, "snapshot", return_value={"test": 1}) as snapshot:
+                    report.init(args)
+                run_cmd.assert_has_calls([
+                    mock.call(["git", "rev-parse", "--git-path", "info/exclude"], encoding="utf-8"),
+                    mock.call(["gh", "issue", "view", str(n), "--json", "number,title,body,comments,labels"]),
+                ])
+                self.assertEqual((d / "issue.json").read_bytes(), issue)
+                run = json.loads((d / "run.json").read_text())
+                self.assertEqual(run["host"], expected_host)
+                self.assertEqual(run["sessions"][0]["id"], expected_session)
+                self.assertEqual(snapshot.call_count, int(expected_host == "claude"))
+        self.assertEqual(exclude.read_bytes(), b"# existing entry\n.agent-loop/\n")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # agent-plugins
 
-A Claude Code plugin: `/agent-loop:run <issue>` works one GitHub issue through planner, executor and reviewer agents. `README.md` describes the behaviour from the user's side. This file holds what the code does not say.
+One plugin for two hosts, Claude Code and GitHub Copilot (CLI and VS Code; see [ADR 0001](docs/adr/0001-one-plugin-two-hosts.md)): `/agent-loop:run <issue>` works one GitHub issue through planner, executor and reviewer agents. `README.md` describes the behaviour from the user's side. This file holds what the code does not say.
 
 ## Where this is going
 
@@ -25,9 +25,10 @@ These were decided with the user; changing one is a design change, so raise it f
 
 ## Coupling to keep in sync
 
-- The reply words live in three places: the routing table in `skills/run/SKILL.md`, the last line of each `agents/*.md`, and the first line of the exec and review files (`STATUS:` / `VERDICT:`), which `scripts/report.py` prints in the Result column.
+- Keep reply words in sync across `skills/run/SKILL.md`, the last line of each `agents/*.md`, exec and review headers (`STATUS:` / `VERDICT:`), and `report.py` (`REPLY`).
 - File names `plan-k.md`, `exec-k.md`, `review-k.md`, `pr-body.md` are shared by the skill, the agents and `report.py` (`RESULT_FILE`).
-- `report.py` finds agent calls by the `agentType` in Claude Code's per-subagent metadata, matching the names in `agents/`. Renaming an agent means updating `ROLES`.
+- Per-role models live in the same agent file: `model:` for Claude Code, `models:`/`modelPolicy:` for Copilot.
+- `report.py` matches Claude Code metadata `agentType` and Copilot `subagent.started` `agentName` against `ROLES`.
 
 ## Transcript format facts
 
@@ -40,10 +41,20 @@ These were decided with the user; changing one is a design change, so raise it f
 
 When a Claude Code update breaks the report, check these first.
 
+### Copilot transcript facts
+
+Unverified until the first real plugin run; record the Copilot CLI version and verify the dispatcher session ID then. Schema sampled from VS Code (`copilot-agent` 1.0.108-0):
+
+- `$COPILOT_HOME/session-state/<session-id>/events.jsonl` (`~/.copilot` by default); session id from `COPILOT_AGENT_SESSION_ID`.
+- `session.usage_record` stores model, token counts, `cost`, `duration`, `initiator`, `interactionType` and subagent `parentToolCallId` in `data.usage`. `agentId` is top-level on subagent records. Input includes cache reads/writes; output includes reasoning.
+- `subagent.started` has `agentName`, `model`, `modelSelectionSource`, `executionMode` and `toolCallId`; `subagent.configured` / `subagent.selected` describe selection. Match `tool.execution_start` / `tool.execution_complete` for `task`. Background completion of `task` can be a launch acknowledgement; `subagent.completed` marks the actual end.
+- `session.usage_checkpoint` carries `data.accountingSnapshot` rollups (`modelMetrics`, `agentMetrics`, `totalPremiumRequestCost`); use usage records for run-scoped totals.
+
 ## Working here
 
 - Tests: `python3 -m unittest discover -s tests`. Validate the plugin: `claude plugin validate .`
 - `scripts/` is Python standard library only, so the plugin runs in any target repository without installing anything.
 - `scripts/prices.json` is copied by hand from https://platform.claude.com/docs/en/about-claude/pricing. Re-read that page before editing prices.
+- Keep `skills/run/SKILL.md` shell commands portable across Bash and PowerShell.
 - Editing `skills/run/SKILL.md` or `agents/*.md`: every line is paid for on each run, by the dispatcher or an agent. State the target behaviour, keep one source of truth per rule, and delete sentences the model would follow anyway.
 - A real run opens a PR and posts comments. Test changes to the loop in a throwaway repository.

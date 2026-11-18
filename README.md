@@ -1,9 +1,9 @@
 # agent-plugins
 
-A Claude Code plugin that runs one agent loop on one GitHub issue:
+A plugin for Claude Code and GitHub Copilot (CLI and VS Code) that runs one agent loop on one GitHub issue:
 
 ```
-planner (fable) -> executor (sonnet) -> reviewer (opus) -> DONE | FIX | REPLAN
+planner -> executor -> reviewer -> DONE | FIX | REPLAN
 ```
 
 The session that invokes the skill is the dispatcher: it spawns the three agents one at a time, routes on their one-line reply, and is the only one that runs `gh` and `git push`. Agents start fresh and hand over through files in `.agent-loop/<issue>/`.
@@ -12,11 +12,12 @@ The session that invokes the skill is the dispatcher: it spawns the three agents
 
 From the repository whose issue you want worked on (clean tree, `gh` authenticated, current branch pushed):
 
+### Claude Code
+
 ```
 claude --plugin-dir /path/to/agent-plugins
 /model haiku                       # a cheap dispatcher is enough
 /agent-loop:run 42
-/agent-loop:run 42 --executor haiku --max-passes 5
 ```
 
 Or install it:
@@ -25,6 +26,25 @@ Or install it:
 claude plugin marketplace add /path/to/agent-plugins
 claude plugin install agent-loop@agent-plugins
 ```
+
+### Copilot
+
+```
+copilot --plugin-dir /path/to/agent-plugins
+/model claude-haiku-5.5
+/agent-loop:run 42
+```
+
+The slash command may appear as `/run`. Or install the same plugin:
+
+```
+copilot plugin marketplace add /path/to/agent-plugins
+copilot plugin install agent-loop@agent-plugins
+```
+
+Copilot requires `gpt-6.2-astra` (planner; fallback `claude-opus-5.5`), `gpt-6.2-sol` (executor) and `claude-opus-5.5` (reviewer). If your Copilot plan doesn't provide a required model, the run aborts rather than substituting another model.
+
+To override the executor, pass a model supported by your host, e.g. `/agent-loop:run 42 --executor gpt-6.2-sol --max-passes 5` on Copilot. The model string is passed through unchanged.
 
 ## What a run does
 
@@ -38,7 +58,10 @@ claude plugin install agent-loop@agent-plugins
 
 ## Report
 
-`scripts/report.py` reads Claude Code's own transcripts under `~/.claude/projects/`: a timeline of agent calls (model, start, duration, result) and tokens and cost per call, per role and in total, dispatcher included. Cost is an API-equivalent estimate from `scripts/prices.json`; edit that file when prices change. A model missing from it shows tokens with cost `n/a`.
+The report shows a timeline (model, start, duration, result), plus tokens and cost per call, per role and in total, including the dispatcher.
+
+- **Claude Code** reads transcripts under `~/.claude/projects/`. Cost is an API-equivalent estimate from `scripts/prices.json`; unknown models show `n/a`.
+- **Copilot** reads transcripts under `~/.copilot/session-state/` and reports tokens and premium requests, with no plan-usage line.
 
 ### Plan usage (optional)
 

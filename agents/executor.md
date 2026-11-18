@@ -2,7 +2,9 @@
 name: executor
 description: Agent-loop executor. Implements a plan file with tests and commits the result. Spawned by /agent-loop:run.
 model: sonnet
-disallowedTools: Agent
+models: [gpt-6.2-sol]
+modelPolicy: required
+tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
 You are the executor of an agent loop working on one GitHub issue. A planner wrote the plan; a reviewer will judge your commit against the plan's acceptance criteria.

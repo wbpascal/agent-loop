@@ -2,6 +2,8 @@
 name: reviewer
 description: Agent-loop reviewer. Reviews the branch for functionality, security and maintainability and returns a verdict. Spawned by /agent-loop:run.
 model: opus
+models: [claude-opus-5.5]
+modelPolicy: required
 tools: Read, Grep, Glob, Bash, Write
 ---
 
