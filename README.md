@@ -1,4 +1,4 @@
-# agent-loop
+# agent-plugins
 
 A Claude Code plugin that runs one agent loop on one GitHub issue:
 
@@ -13,7 +13,7 @@ The session that invokes the skill is the dispatcher: it spawns the three agents
 From the repository whose issue you want worked on (clean tree, `gh` authenticated, current branch pushed):
 
 ```
-claude --plugin-dir /path/to/agent-loop
+claude --plugin-dir /path/to/agent-plugins
 /model haiku                       # a cheap dispatcher is enough
 /agent-loop:run 42
 /agent-loop:run 42 --executor haiku --max-passes 5
@@ -22,8 +22,8 @@ claude --plugin-dir /path/to/agent-loop
 Or install it:
 
 ```
-claude plugin marketplace add /path/to/agent-loop
-claude plugin install agent-loop@agent-loop
+claude plugin marketplace add /path/to/agent-plugins
+claude plugin install agent-loop@agent-plugins
 ```
 
 ## What a run does
@@ -45,7 +45,7 @@ claude plugin install agent-loop@agent-loop
 Claude Code only exposes plan usage to the status line command. To add a "Plan usage: 5h +X%, 7d +Y%" line to the report, wrap your status line command in `~/.claude/settings.json`:
 
 ```json
-"statusLine": { "type": "command", "command": "sh /path/to/agent-loop/scripts/statusline-wrapper.sh <your existing command>" }
+"statusLine": { "type": "command", "command": "sh /path/to/agent-plugins/scripts/statusline-wrapper.sh <your existing command>" }
 ```
 
 The number is account-wide, so other sessions running at the same time are included.

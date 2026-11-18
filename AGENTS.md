@@ -1,4 +1,4 @@
-# agent-loop
+# agent-plugins
 
 A Claude Code plugin: `/agent-loop:run <issue>` works one GitHub issue through planner, executor and reviewer agents. `README.md` describes the behaviour from the user's side. This file holds what the code does not say.
 

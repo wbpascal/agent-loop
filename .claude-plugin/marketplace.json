@@ -1,6 +1,6 @@
 {
-  "name": "agent-loop",
-  "description": "Agent loop plugin",
+  "name": "agent-plugins",
+  "description": "Agent plugins",
   "owner": { "name": "Pascal Wiedenbeck" },
   "plugins": [
     {
