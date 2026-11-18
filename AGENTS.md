@@ -22,6 +22,7 @@ These were decided with the user; changing one is a design change, so raise it f
 - **Only the dispatcher uses `gh` and `git push`.** The executor commits; planner and reviewer write only their own output file.
 - **One reviewer, three mandatory sections** (functionality, security, maintainability). Splitting into specialised reviewers is an open option if the security section proves shallow in practice.
 - **The reviewer reports, the executor changes code.** Large problems go to a fresh planner (`REPLAN`), small ones to the executor (`FIX`).
+- **Effort defaults live in `skills/run/SKILL.md`.** Both hosts accept per-call effort, so pass it with every spawn. Frontmatter would need three spellings (`effort`, `reasoningEffort`, `reasoning-effort`), one unverified. Models stay in frontmatter because their names differ by host.
 
 ## Coupling to keep in sync
 
@@ -38,6 +39,7 @@ These were decided with the user; changing one is a design change, so raise it f
 - One API response spans several transcript lines that repeat the same `message.id` and usage. Summing lines overcounts; the script keeps the last line per id.
 - Usage splits cache writes into 5-minute and 1-hour tokens, priced differently.
 - Plan usage (rate limit percentages) reaches only the status line command, hence `scripts/statusline-wrapper.sh`.
+- Whether Claude Code transcripts record effort is unverified. The report shows only Copilot effort (`data.usage.reasoningEffort` on `session.usage_record`).
 
 When a Claude Code update breaks the report, check these first.
 

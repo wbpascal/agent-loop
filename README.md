@@ -48,6 +48,8 @@ Copilot requires `gpt-6.2-astra` (planner; fallback `claude-opus-5.5`), `gpt-6.2
 
 To override the executor, pass a model supported by your host, e.g. `/agent-loop:run 42 --executor gpt-6.2-sol --max-passes 5` on Copilot. The model string is passed through unchanged.
 
+Effort defaults to `medium` for `--planner-effort` and `--executor-effort`, and `high` for `--reviewer-effort`. For example: `/agent-loop:run 42 --planner-effort high --executor-effort low --reviewer-effort medium`. Values are passed through unchanged, so the host may reject a level its model does not support. On Claude Code, `CLAUDE_CODE_EFFORT_LEVEL` overrides all three.
+
 ## What a run does
 
 1. Creates `agent/issue-<N>` from the current branch.
@@ -63,7 +65,7 @@ To override the executor, pass a model supported by your host, e.g. `/agent-loop
 The report shows a timeline (model, start, duration, result), plus tokens and cost per call, per role and in total, including the dispatcher.
 
 - **Claude Code** reads transcripts under `~/.claude/projects/`. Cost is an API-equivalent estimate from `scripts/prices.json`; unknown models show `n/a`.
-- **Copilot** reads transcripts under `~/.copilot/session-state/` and reports tokens and premium requests, with no plan-usage line.
+- **Copilot** reads transcripts under `~/.copilot/session-state/` and reports tokens and premium requests, with no plan-usage line. The Model column includes reasoning effort when recorded.
 
 ### Plan usage (optional)
 

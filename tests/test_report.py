@@ -94,14 +94,16 @@ class ReportTest(unittest.TestCase):
             event("09:59:58", "tool.execution_start", toolName="task", toolCallId="old"),
             event("09:59:59", "session.usage_record", usage={"inputTokens": 9999, "cost": 100}),
             event("10:00:00", "subagent.started", "old", agentName="planner", toolCallId="old"),
-            event("10:00:01", "session.usage_record", usage={"model": "claude-haiku-5.5", "inputTokens": 100,
+            event("10:00:01", "session.usage_record", usage={"model": "claude-haiku-5.5",
+                                                              "reasoningEffort": "low", "inputTokens": 100,
                                                               "cacheReadTokens": 75, "outputTokens": 10, "cost": 0.25}),
             event("10:01:00", "tool.execution_start", toolName="task", toolCallId="p"),
             event("10:01:01", "subagent.started", "a", agentName="agent-loop:planner", toolCallId="p", model="gpt-6.2-astra"),
             event("10:01:20", "session.usage_record", "a", usage={"parentToolCallId": "p", "initiator": "sub-agent",
                   "inputTokens": 200, "cacheReadTokens": 120, "cacheWriteTokens": 50, "outputTokens": 20,
-                  "reasoningTokens": 5, "cost": 1}),
-            event("10:01:50", "session.usage_record", "a", usage={"inputTokens": 10, "outputTokens": 2, "cost": 0.5}),
+                  "reasoningTokens": 5, "reasoningEffort": "medium", "cost": 1}),
+            event("10:01:50", "session.usage_record", "a", usage={"inputTokens": 10, "outputTokens": 2,
+                                                                  "reasoningEffort": "high", "cost": 0.5}),
             event("10:02:05", "tool.execution_complete", toolCallId="p", success=True,
                   result={"content": "Agent replied:\r\nPLAN .agent-loop/42/plan-1.md\r\n"}),
             event("10:02:56", "subagent.started", "x", agentName="research", toolCallId="other"),
@@ -127,8 +129,9 @@ class ReportTest(unittest.TestCase):
              mock.patch.object(report, "plan_usage", side_effect=AssertionError("Claude only")):
             report.report(SimpleNamespace(dir=str(self.run), outcome="cap", out=path))
         out = path.read_text(encoding="utf-8")
-        self.assertIn("| 1 | planner 1 | gpt-6.2-astra | 10:01:00 | 1m 05s | PLAN .agent-loop/42/plan-1.md | 40 | 50 | 120 | 22 | 5 | 1.5 |", out)
+        self.assertIn("| 1 | planner 1 | gpt-6.2-astra (medium) | 10:01:00 | 1m 05s | PLAN .agent-loop/42/plan-1.md | 40 | 50 | 120 | 22 | 5 | 1.5 |", out)
         self.assertIn("| 2 | executor 1 | gpt-6.2-sol | 10:03:00 | 1m 03s | GREEN | 30 | 0 | 0 | 18 | 8 | 2 |", out)
+        self.assertIn("| - | dispatcher | claude-haiku-5.5 (low) | 10:00:01 |", out)
         self.assertIn("| dispatcher | - | 25 | 0 | 75 | 10 | 0 | 0.25 |", out)
         self.assertIn("| **Total** | 2 | 95 | 50 | 195 | 50 | 13 | 3.75 |", out)
         self.assertEqual(buf.getvalue().strip(), "Total: 3.75 premium requests, 390 tokens, 2 agent calls, outcome cap")

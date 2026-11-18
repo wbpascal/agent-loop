@@ -203,6 +203,7 @@ def read_copilot(path, since):
                 if not c.get("finished"):
                     c["end"] = t
                 c["model"] = c["model"] or u.get("model") or ""
+                c["effort"] = c.get("effort") or u.get("reasoningEffort") or ""
                 tok = {k: u.get(field) or 0 for k, field in COPILOT_TOKENS.items()}
                 # Copilot input includes cache reads and writes; the table splits them out.
                 tok["input"] = max(0, tok["input"] - tok["cache_read"] - tok["cache_write"])
@@ -275,11 +276,19 @@ def report(a):
 
     out = [f"## Agent loop report: issue #{d.resolve().name}", "", f"**Outcome:** {a.outcome}", "", "### Timeline", ""]
     seen, rows = {}, []
-    for i, c in enumerate(agents, 1):
-        k = seen[c["role"]] = seen.get(c["role"], 0) + 1
+    i = 0
+    for c in calls if copilot else agents:
+        role = c["role"]
+        if role == "dispatcher":
+            number, label, reply = "-", role, ""
+        else:
+            i += 1
+            k = seen[role] = seen.get(role, 0) + 1
+            number, label = str(i), f"{role} {k}"
+            reply = c.get("reply") or result(d, role, k)
         secs = int((c["end"] - c["start"]).total_seconds())
-        reply = c.get("reply") or result(d, c["role"], k)
-        rows.append([str(i), f"{c['role']} {k}", c["model"], f"{c['start']:%H:%M:%S}", f"{secs // 60}m {secs % 60:02d}s", reply] + cells(c, copilot))
+        model = f"{c['model']} ({c['effort']})" if c.get("effort") else c["model"]
+        rows.append([number, label, model, f"{c['start']:%H:%M:%S}", f"{secs // 60}m {secs % 60:02d}s", reply] + cells(c, copilot))
     out += table(["#", "Agent", "Model", "Start (UTC)", "Duration", "Result"] + columns, rows)
 
     out += ["", "### Per role", ""]

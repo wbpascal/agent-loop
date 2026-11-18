@@ -1,7 +1,7 @@
 ---
 name: run
 description: Run one agent loop on a GitHub issue (planner, executor, reviewer) until the reviewer says done.
-argument-hint: <issue-number> [--executor <model>] [--max-passes N]
+argument-hint: <issue-number> [--executor <model>] [--planner-effort E] [--executor-effort E] [--reviewer-effort E] [--max-passes N]
 disable-model-invocation: true
 ---
 
@@ -11,6 +11,9 @@ Arguments: `$ARGUMENTS`
 
 - `N`: issue number, required.
 - `--executor <model>`: pass the string unchanged as the executor model. Omitted: use the agent default.
+- `--planner-effort <E>`: planner effort. Default `medium`.
+- `--executor-effort <E>`: executor effort. Default `medium`.
+- `--reviewer-effort <E>`: reviewer effort. Default `high`.
 - `--max-passes <P>`: maximum executor calls. Default 3.
 
 You are the **dispatcher**. Three agents do all reading, thinking and coding. You spawn them one at a time, route on their one-line reply, and run `git` and `gh`. You carry paths, not content: every file under `.agent-loop/N/` stays unread by you, because the reply line already holds everything routing needs.
@@ -37,7 +40,7 @@ Done when `D/issue.json` and `D/run.json` exist and the current branch is `agent
 
 ## 2. Loop
 
-Spawn this plugin's `planner`, `executor` or `reviewer` in the foreground with the host's subagent tool. Pass `model` only to the executor when `--executor` was given. Description: `<role> #N call <k>`. Prompt:
+Spawn this plugin's `planner`, `executor` or `reviewer` in the foreground with the host's subagent tool. On every spawn pass the role's effort unchanged, without validation (`effort` on Claude Code, `reasoning_effort` on Copilot). Pass `model` only to the executor when `--executor` was given. Description: `<role> #N call <k>`. Prompt:
 
 ```
 Issue number: N
