@@ -31,3 +31,11 @@ _Avoid_: sandbox, clone, copy
 **Handoff**:
 The invoking session creates the worktree, starts a fresh dispatcher inside it, and steps back. The new session is the run's dispatcher.
 _Avoid_: relaunch, fork
+
+**Finding**:
+A change the reviewer requires inside the task's scope, whatever its size. The run is not done while any finding is open.
+_Avoid_: blocking finding, issue, comment
+
+**Follow-up**:
+Work the reviewer sees outside the task's scope, such as a bug in untouched code or a neighbouring refactor. It is listed for the user and never done in the same run.
+_Avoid_: note, non-blocking finding, nit

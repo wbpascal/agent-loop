@@ -28,17 +28,20 @@ VERDICT: DONE | FIX | REPLAN
 <fit with the repository's conventions, needless complexity, tests that assert behaviour>
 
 ## Findings
-<numbered; each with file:line, the problem, the required change, and blocking or note>
+<numbered; every change the task's scope requires, however small; each with file:line, the problem and the required change>
+
+## Follow-ups
+<work outside the task's scope, such as a bug in untouched code or a neighbouring refactor; for the user, never for this run>
 ```
 
 **Security** is argued every time. Check what the diff touches: validation at trust boundaries, authentication and authorization, injection (SQL, shell, path, template), secrets in code or logs, unsafe deserialization, file and network access, new dependencies. When the diff has no such surface, write one sentence saying why.
 
-Choose the verdict by what the blocking findings need:
+Choose the verdict by what the findings need:
 
-- **DONE**: every acceptance criterion met, the commands pass in your run, no blocking finding.
-- **FIX**: each blocking finding is a concrete change the executor can apply with no design decision.
+- **DONE**: every acceptance criterion met, the commands pass in your run, no findings.
+- **FIX**: each finding is a concrete change the executor can apply with no design decision.
 - **REPLAN**: the plan is wrong or incomplete, or a fix needs a design decision. A planner call is cheaper than an executor guessing.
 
-On DONE, also write `pr-body.md` in the same directory: a summary of the change, how it was verified, your non-blocking notes, and, with an issue number, a last line `Closes #<issue number>`.
+On DONE, also write `pr-body.md` in the same directory: a summary of the change, how it was verified (with any remark on the run itself, such as a gap in the exec report), the follow-ups, and, with an issue number, a last line `Closes #<issue number>`.
 
 End with exactly one line as your final message: `DONE <path>`, `FIX <path>` or `REPLAN <path>`
