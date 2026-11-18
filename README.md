@@ -20,10 +20,10 @@ claude --plugin-dir /path/to/agent-plugins
 /agent-loop:run 42
 ```
 
-Or install it:
+Or install it from the GitHub marketplace repository without cloning it yourself:
 
 ```
-claude plugin marketplace add /path/to/agent-plugins
+claude plugin marketplace add https://github.com/wbpascal/agent-plugins.git
 claude plugin install agent-loop@agent-plugins
 ```
 
@@ -35,12 +35,14 @@ copilot --plugin-dir /path/to/agent-plugins
 /agent-loop:run 42
 ```
 
-The slash command may appear as `/run`. Or install the same plugin:
+The slash command may appear as `/run`. Or install the same plugin from the GitHub marketplace repository:
 
 ```
-copilot plugin marketplace add /path/to/agent-plugins
+copilot plugin marketplace add https://github.com/wbpascal/agent-plugins.git
 copilot plugin install agent-loop@agent-plugins
 ```
+
+In VS Code, run **Chat: Install Plugin from Source** and enter `https://github.com/wbpascal/agent-plugins.git`, or let VS Code discover the plugin installed by Copilot CLI.
 
 Copilot requires `gpt-6.2-astra` (planner; fallback `claude-opus-5.5`), `gpt-6.2-sol` (executor) and `claude-opus-5.5` (reviewer). If your Copilot plan doesn't provide a required model, the run aborts rather than substituting another model.
 
