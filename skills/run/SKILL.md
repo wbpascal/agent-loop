@@ -35,8 +35,9 @@ Stop and tell the user which check failed. In place: `git status --porcelain` pr
 
 Issue mode:
 
-- `gh issue view N --json state -q .state` prints `OPEN`.
+- `gh issue view N --json state,assignees -q '[.state, .assignees[].login] | join(" ")'` prints `OPEN` first. Unless a handoff landed here, if it lists a login other than `gh api user -q .login`, ask the user: continue or abort.
 - `BASE` = `--base` or else `git branch --show-current`, and `git ls-remote --heads origin BASE` finds it (it becomes the PR base).
+- Unless a handoff landed here: if `gh pr list --head BASE --state open --json number` lists exactly one PR, `BASE_PR`, and `gh api 'repos/{owner}/{repo}/stacks?pull_request=BASE_PR'` shows it in a stack below another PR, tell the user the top PR's branch, ask: abort and start from that branch to stack the PR, or continue unstacked.
 - If the current branch is `agent/issue-N` (a handoff landed here), skip this check and `git switch -c` below; if `D/run.json` exists, resume. Otherwise branch `agent/issue-N` exists neither locally nor on origin. If it exists, ask the user: resume or abort. Resume means keep the files in `D`, continue their numbering, and enter the loop at the planner with the newest review or exec report as extra input; in place, first `git switch agent/issue-N`.
 
 Prompt mode: choose `SLUG`, a summary of the prompt in at most 40 characters of `a-z`, `0-9` and `-`; on a branch `agent/X`, `SLUG` is `X`. A `--resume <slug>` runs in a worktree when branch `agent/<slug>` exists and `--in-place` was not given.
@@ -57,6 +58,8 @@ Issue mode, run in order, stopping on failure:
 REPORT init --dir D --base BASE --session=${CLAUDE_SESSION_ID}
 git switch -c agent/issue-N
 ```
+
+Then `gh issue edit N --add-assignee @me`; if it fails, warn the user and go on.
 
 Prompt mode, new run: run `REPORT init --dir .agent-loop/SLUG --prompt --session=${CLAUDE_SESSION_ID}`, then write the prompt verbatim to `D/task.md` with your file-writing tool.
 
@@ -102,6 +105,7 @@ Issue mode, outcome `done` (the reviewer has written `D/pr-body.md`):
 ```text
 git push -u origin agent/issue-N
 gh pr create --base BASE --head agent/issue-N --title '<issue title> (#N)' --body-file D/pr-body.md
+(stack the PR, below)
 REPORT report --dir D --outcome done --out D/report.md
 gh pr comment PR_URL --body-file D/report.md
 git switch BASE   (skip when WT is set)
@@ -114,7 +118,9 @@ REPORT report --dir D --outcome OUTCOME --out D/report.md
 gh issue comment N --body-file D/report.md
 ```
 
-Get the issue title with `gh issue view N --json title -q .title`; escape it for the shell. Use the URL from `gh pr create` as `PR_URL`.
+Get the issue title with `gh issue view N --json title -q .title`; escape it for the shell. Use the URL from `gh pr create` as `PR_URL`, its number as `PR`.
+
+Stack the PR: run `gh pr list --head BASE --state open --json number` again. With exactly one PR, `BASE_PR`, find its stack with `gh api 'repos/{owner}/{repo}/stacks?pull_request=BASE_PR'`. In a stack numbered `S`: `gh api -X POST repos/{owner}/{repo}/stacks/S/add -F 'pull_requests[]=PR'`. In none: `gh api -X POST repos/{owner}/{repo}/stacks -F 'pull_requests[]=BASE_PR' -F 'pull_requests[]=PR'`. With several PRs, or when a call fails, warn the user and go on; the PR stays unstacked against `BASE`. With none, do nothing.
 
 Prompt mode, every outcome: run `REPORT report --dir D --outcome OUTCOME --out D/report.md --print`. The commits stay on the current branch.
 

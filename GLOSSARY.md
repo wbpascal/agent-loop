@@ -39,3 +39,7 @@ _Avoid_: blocking finding, issue, comment
 **Follow-up**:
 Work the reviewer sees outside the task's scope, such as a bug in untouched code or a neighbouring refactor. It is listed for the user and never done in the same run.
 _Avoid_: note, non-blocking finding, nit
+
+**Stack**:
+A chain of pull requests where each one targets the branch of the one below it; the bottom one targets the trunk, such as `master`. An issue run whose base branch has an open pull request joins its own pull request to that pull request's stack.
+_Avoid_: chain, dependent PR, stacked branch
