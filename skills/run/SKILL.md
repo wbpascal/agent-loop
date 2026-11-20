@@ -37,7 +37,7 @@ Stop and tell the user which check failed. In place: `git status --porcelain` pr
 Issue mode:
 
 - `gh issue view N --json state,assignees -q '[.state, .assignees[].login] | join(" ")'` prints `OPEN` first. Unless a handoff landed here, if it lists a login other than `gh api user -q .login`, ask the user: continue or abort.
-- `BASE` = `--base` or else `git branch --show-current`, and `git ls-remote --heads origin BASE` finds it (it becomes the PR base).
+- `BASE` = `--base` or else `git branch --show-current`, and `git fetch origin BASE` succeeds (it becomes the PR base; a new branch starts at `origin/BASE`).
 - Unless a handoff landed here: if `gh pr list --head BASE --state open --json number` lists exactly one PR, `BASE_PR`, and `gh api 'repos/{owner}/{repo}/stacks?pull_request=BASE_PR'` shows it in a stack below another PR, tell the user the top PR's branch, ask: abort and start from that branch to stack the PR, or continue unstacked.
 - If the current branch is `agent/issue-N` (a handoff landed here), skip this check and `git switch -c` below; if `D/run.json` exists, resume. Otherwise branch `agent/issue-N` exists neither locally nor on origin. If it exists, ask the user: resume or abort. Resume means keep the files in `D`, continue their numbering, and enter the loop at the planner (executor with `--no-plan`) with the newest review or exec report as extra input; in place, first `git switch agent/issue-N`.
 
@@ -49,7 +49,7 @@ With `--no-plan` and none of `--executor`, `--executor-effort`, `--reviewer`, `-
 
 ### Worktree handoff
 
-In a worktree run, do this before anything below. `B` is `agent/issue-N` or `agent/SLUG`. Run `REPORT worktree --branch B --base START`, with `START` = `BASE` for an issue and `HEAD` for a new prompt run; omit `--base` when `B` exists. It prints `Worktree: P`, `Herdr: yes|no`, and `Space: S` when a Herdr space already shows `P`. `CMD` is `/agent-loop:run --in-place`, then `--base BASE` (issue mode), the other flags, and the task (`N`, the prompt or `--resume <slug>`), escaped for the shell. Then:
+In a worktree run, do this before anything below. `B` is `agent/issue-N` or `agent/SLUG`. Run `REPORT worktree --branch B --base START`, with `START` = `origin/BASE` for an issue and `HEAD` for a new prompt run; omit `--base` when `B` exists. It prints `Worktree: P`, `Herdr: yes|no`, and `Space: S` when a Herdr space already shows `P`. `CMD` is `/agent-loop:run --in-place`, then `--base BASE` (issue mode), the other flags, and the task (`N`, the prompt or `--resume <slug>`), escaped for the shell. Then:
 
 - `Herdr: yes`: `herdr-app do space.new --folder P --argv '["claude"]' --task 'CMD'` (`["copilot"]` on Copilot); with `Space: S`, `tab.new --space S` instead of `space.new`. Tell the user the run continues in the worktree `P`, and end.
 - Claude Code: enter `P` with `EnterWorktree` (`path`) and continue as if invoked with `CMD`.
@@ -61,7 +61,7 @@ Issue mode, run in order, stopping on failure:
 
 ```text
 REPORT init --dir D --base BASE --session=${CLAUDE_SESSION_ID}
-git switch -c agent/issue-N
+git switch -c agent/issue-N origin/BASE
 ```
 
 Then `gh issue edit N --add-assignee @me`; if it fails, warn the user and go on.
@@ -76,7 +76,7 @@ Done when `D/run.json` and the task file exist, and in issue mode the current br
 
 ## 2. Loop
 
-Spawn this plugin's `planner`, `executor` or `reviewer` in the foreground with the host's subagent tool. On every spawn pass the role's effort unchanged, without validation (`effort` on Claude Code, `reasoning_effort` on Copilot). Pass `model` to the executor or reviewer only when `--executor` or `--reviewer` was given. Description: `<role> ID call <k>`. Prompt (the `Issue number` line in issue mode only, the `Plan` line in a planless run only; `Task` is `D/issue.json` or `D/task.md`):
+Spawn this plugin's `planner`, `executor` or `reviewer` in the foreground with the host's subagent tool. On every spawn pass the role's effort unchanged, without validation (`effort` on Claude Code, `reasoning_effort` on Copilot). Pass `model` to the executor or reviewer only when `--executor` or `--reviewer` was given. Description: `<role> ID call <k>`. Prompt (the `Issue number` line in issue mode only, the `Plan` line in a planless run only; `Task` is `D/issue.json` or `D/task.md`; `Base` is `origin/BASE` in issue mode):
 
 ```
 Issue number: N

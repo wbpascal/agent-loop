@@ -78,7 +78,7 @@ Resume a worktree run from anywhere with the same command; the dispatcher finds 
 
 ## What a run does
 
-1. Creates `agent/issue-<N>` from the current branch, in a worktree unless `--in-place` (issue only; a prompt run stays on the current branch unless `--worktree`), and assigns the issue to you. If someone else is already assigned, it asks before going on. The assignment stays after the run.
+1. Fetches the base branch (the current branch unless `--base`) and creates `agent/issue-<N>` from `origin/<base>`, in a worktree unless `--in-place` (issue only; a prompt run stays on the current branch unless `--worktree`), and assigns the issue to you. If someone else is already assigned, it asks before going on. The assignment stays after the run.
 2. Planner writes `plan-k.md`; executor implements, tests and commits, writing `exec-k.md`; reviewer reviews the whole branch for functionality, security and maintainability, writing `review-k.md`.
 3. Reviewer verdict routes the loop: `FIX` back to the executor, `REPLAN` to a fresh planner, `DONE` ends it. An executor that cannot follow the plan returns `BLOCKED`, which also goes to a fresh planner.
 4. `DONE` on an issue: pushes the branch, opens a PR against the branch you started from, and posts the report as a PR comment. If that branch has an open PR, the new PR joins its [stack](https://docs.github.com/en/pull-requests/get-started/about-stacked-prs); if that PR sits mid-stack, the run asks first, since only the top of a stack can be extended.
