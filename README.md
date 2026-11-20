@@ -48,6 +48,10 @@ Copilot requires `gpt-6.2-astra` (planner; fallback `claude-opus-5.5`), `gpt-6.2
 
 To override the executor, pass a model supported by your host, e.g. `/agent-loop:run 42 --executor gpt-6.2-sol --max-passes 5` on Copilot. The model string is passed through unchanged.
 
+`--reviewer <model>` overrides the reviewer the same way.
+
+`--no-plan` starts a planless run: no planner, the executor works from the task directly and the reviewer judges against it. It suits small tasks given to a stronger executor and reviewer, so unless you pass model or effort flags the dispatcher offers to switch to Opus (medium) executor and Fable (high) reviewer on Claude Code, or Opus 5.5 executor (medium) and reviewer (high) on Copilot. Pass `--no-plan` again with `--resume`.
+
 Effort defaults to `medium` for `--planner-effort` and `--executor-effort`, and `high` for `--reviewer-effort`. For example: `/agent-loop:run 42 --planner-effort high --executor-effort low --reviewer-effort medium`. Values are passed through unchanged, so the host may reject a level its model does not support. On Claude Code, `CLAUDE_CODE_EFFORT_LEVEL` overrides all three.
 
 ### From a prompt

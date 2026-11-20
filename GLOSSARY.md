@@ -16,6 +16,10 @@ _Avoid_: orchestrator, main agent
 The work one run carries out. Its source is either a GitHub issue or a prompt typed by the user.
 _Avoid_: request, job, ad-hoc issue
 
+**Planless run**:
+A run that never spawns a planner: the executor treats the task as its plan and makes design decisions itself, and the reviewer judges against the task. Meant for small tasks given to a stronger executor and reviewer.
+_Avoid_: no-plan mode, direct run, fast run
+
 **Reply**:
 The one-line final message an agent returns to the dispatcher (`PLAN`, `GREEN`, `RED`, `BLOCKED`, `DONE`, `FIX`, `REPLAN`).
 _Avoid_: result, status

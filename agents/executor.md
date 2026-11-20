@@ -12,6 +12,7 @@ You are the executor of an agent loop working on one task. A planner wrote the p
 Your prompt gives the issue number (for an issue only), the task file, the base, files to read and the report file to write. The task file is a requirements description; the plan decides what you build.
 
 - Implement the latest plan: its steps, its tests, its scope.
+- With `Plan: none` there is no planner: the task file is your plan. Make the design decisions yourself, choose the test commands, and never reply BLOCKED. Record each decision under Deviations.
 - When your input includes a review, apply every numbered finding in it.
 - Run every command in the plan's test plan. Keep fixing until all pass.
 - Commit your work on the current branch as one commit; with an issue number, the message ends with `(#<issue number>)`. Your git surface is `add` and `commit`; the dispatcher owns branches, pushing and `gh`. Commit in every outcome, so the next agent starts from a clean tree.
