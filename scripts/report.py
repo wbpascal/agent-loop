@@ -2,7 +2,7 @@
 """Bookkeeping for /agent-loop:run.
 
 init      prepare the task directory and record the run start in <dir>/run.json
-worktree  find or create the git worktree for a run branch
+worktree  find or create the git worktree for a run branch (in Orca: say whether Orca creates or has it)
 report  generate the markdown token/cost report from the host's transcripts
 """
 import argparse
@@ -157,6 +157,19 @@ def init(a):
     dotgit = Path(".git")
     if dotgit.is_file() and "/worktrees/" in dotgit.read_text().replace("\\", "/"):
         print(f"Worktree: {Path.cwd().as_posix()}")
+    if orca("worktree", "current"):
+        print("Orca: yes")
+
+
+def orca(*args):
+    """Result of an `orca` CLI call, or None outside Orca or when the call fails."""
+    if not os.environ.get("ORCA_APP_VERSION"):
+        return None
+    try:
+        out = subprocess.check_output(["orca", *args, "--json"], encoding="utf-8", stderr=subprocess.DEVNULL)
+        return json.loads(out)["result"]
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+        return None
 
 
 def herdr_root():
@@ -173,14 +186,27 @@ def worktree(a):
     trees = [dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
              for block in listing.strip().split("\n\n")]
     ref = f"refs/heads/{a.branch}"
-    herdr = bool(os.environ.get("HC_TERMINAL_SOCKET"))
     path = next((t["worktree"] for t in trees if t.get("branch") == ref), None)
+    exists = path is not None or subprocess.run(["git", "show-ref", "--verify", "--quiet", ref]).returncode == 0
+    in_orca = bool(orca("worktree", "current"))
+    if in_orca:
+        # Orca hides worktrees it did not create, so it must create the run's worktree itself.
+        known = orca("worktree", "show", "--worktree", f"branch:{a.branch}")
+        if known:
+            print(f"Worktree: {Path(known['worktree']['path']).as_posix()}\nOrca: launch")
+            return
+        if not exists and a.base:
+            start = subprocess.check_output(["git", "rev-parse", "--verify", f"{a.base}^{{commit}}"],
+                                            encoding="utf-8").strip()
+            print(f"Orca: create\nStart: {start}")
+            return
+    herdr = not in_orca and bool(os.environ.get("HC_TERMINAL_SOCKET"))
     if path is None:
         main = Path(trees[0]["worktree"])
         # Same layout as Herdr's New worktree dialog, so the space nests under its repo.
         leaf = a.branch.replace("/", "-")
         path = str((herdr_root() / main.name if herdr else main.parent / f"{main.name}.worktrees") / leaf)
-        if subprocess.run(["git", "show-ref", "--verify", "--quiet", ref]).returncode == 0:
+        if exists:
             add = ["git", "worktree", "add", path, a.branch]
         elif a.base:
             add = ["git", "worktree", "add", "-b", a.branch, path, a.base]

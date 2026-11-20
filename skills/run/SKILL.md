@@ -28,7 +28,7 @@ After the flags, the task:
 
 You are the **dispatcher**. Three agents do all reading, thinking and coding. You spawn them one at a time, route on their one-line reply, and run `git` and `gh`. You carry paths, not content: every file under `D` stays unread by you, because the reply line already holds everything routing needs.
 
-Substitute placeholders. Issue mode: `D` is `.agent-loop/N`, `ID` is `#N`. Prompt mode: `D` and `BASE` are the `Dir:` and `Base:` lines printed by `REPORT init`, `ID` is the last part of `D`. `WT` is the `Worktree:` line printed by `REPORT init`, if any. `REPORT` is `python "${CLAUDE_PLUGIN_ROOT}/scripts/report.py"` (use `python3` if that is your Python 3 command; if `${CLAUDE_PLUGIN_ROOT}` is not filled in, the plugin root is two levels above this skill's base directory).
+Substitute placeholders. Issue mode: `D` is `.agent-loop/N`, `ID` is `#N`. Prompt mode: `D` and `BASE` are the `Dir:` and `Base:` lines printed by `REPORT init`, `ID` is the last part of `D`. `WT` is the `Worktree:` line printed by `REPORT init`, if any. **In Orca** means `REPORT init` printed `Orca: yes`; when an `orca` command fails, warn the user and go on. `REPORT` is `python "${CLAUDE_PLUGIN_ROOT}/scripts/report.py"` (use `python3` if that is your Python 3 command; if `${CLAUDE_PLUGIN_ROOT}` is not filled in, the plugin root is two levels above this skill's base directory).
 
 ## 1. Preflight
 
@@ -49,8 +49,10 @@ With `--no-plan` and none of `--executor`, `--executor-effort`, `--reviewer`, `-
 
 ### Worktree handoff
 
-In a worktree run, do this before anything below. `B` is `agent/issue-N` or `agent/SLUG`. Run `REPORT worktree --branch B --base START`, with `START` = `origin/BASE` for an issue and `HEAD` for a new prompt run; omit `--base` when `B` exists. It prints `Worktree: P`, `Herdr: yes|no`, and `Space: S` when a Herdr space already shows `P`. `CMD` is `/agent-loop:run --in-place`, then `--base BASE` (issue mode), the other flags, and the task (`N`, the prompt or `--resume <slug>`), escaped for the shell. Then:
+In a worktree run, do this before anything below. `B` is `agent/issue-N` or `agent/SLUG`. Run `REPORT worktree --branch B --base START`, with `START` = `origin/BASE` for an issue and `HEAD` for a new prompt run; omit `--base` when `B` exists. It prints `Worktree: P`, `Herdr: yes|no`, and `Space: S` when a Herdr space already shows `P`; or, in Orca, `Orca: create` and `Start: C`, or `Worktree: P` and `Orca: launch`. `CMD` is `/agent-loop:run --in-place`, then `--base BASE` (issue mode), the other flags, and the task (`N`, the prompt or `--resume <slug>`), escaped for the shell. Then:
 
+- `Orca: create`: `orca worktree create --name NAME --branch B --base-branch C --agent claude --prompt 'CMD'`, with `--issue N` in issue mode, `--agent copilot` on Copilot, and `NAME` = `B` without `agent/`. Tell the user the run continues in the new Orca worktree, and end.
+- `Orca: launch`: `orca agent launch --agent claude --worktree path:P --prompt 'CMD'` (`--agent copilot` on Copilot). Tell the user the run continues in the Orca worktree `P`, and end.
 - `Herdr: yes`: `herdr-app do space.new --folder P --argv '["claude"]' --task 'CMD'` (`["copilot"]` on Copilot); with `Space: S`, `tab.new --space S` instead of `space.new`. Tell the user the run continues in the worktree `P`, and end.
 - Claude Code: enter `P` with `EnterWorktree` (`path`) and continue as if invoked with `CMD`.
 - Copilot: tell the user to run `cd P && copilot -i "CMD"`, and end.
@@ -72,11 +74,13 @@ Prompt mode, resume: run `REPORT init --dir .agent-loop/<slug> --resume --sessio
 
 Prompt mode works on the current branch: no `gh`, no push.
 
+In Orca with `WT` set: `orca worktree set --worktree current --workspace-status in-progress`.
+
 Done when `D/run.json` and the task file exist, and in issue mode the current branch is `agent/issue-N`.
 
 ## 2. Loop
 
-Spawn this plugin's `planner`, `executor` or `reviewer` in the foreground with the host's subagent tool. On every spawn pass the role's effort unchanged, without validation (`effort` on Claude Code, `reasoning_effort` on Copilot). Pass `model` to the executor or reviewer only when `--executor` or `--reviewer` was given. Description: `<role> ID call <k>`. Prompt (the `Issue number` line in issue mode only, the `Plan` line in a planless run only; `Task` is `D/issue.json` or `D/task.md`; `Base` is `origin/BASE` in issue mode):
+Spawn this plugin's `planner`, `executor` or `reviewer` in the foreground with the host's subagent tool. On every spawn pass the role's effort unchanged, without validation (`effort` on Claude Code, `reasoning_effort` on Copilot). Pass `model` to the executor or reviewer only when `--executor` or `--reviewer` was given. Description: `<role> ID call <k>`; in Orca, first `orca worktree set --worktree current --comment '<description>'`. Prompt (the `Issue number` line in issue mode only, the `Plan` line in a planless run only; `Task` is `D/issue.json` or `D/task.md`; `Base` is `origin/BASE` in issue mode):
 
 ```
 Issue number: N
@@ -132,4 +136,6 @@ Stack the PR: run `gh pr list --head BASE --state open --json number` again. Wit
 
 Prompt mode, every outcome: run `REPORT report --dir D --outcome OUTCOME --out D/report.md --print`. The commits stay on the current branch.
 
-Done when the report is posted (issue mode) or printed (prompt mode). Tell the user the outcome and the total line printed by `REPORT report`. Issue mode: add the PR URL if any. When `WT` is set, add `WT` and `git worktree remove WT` to clean up once the user is done with it. Prompt mode: first repeat the whole printed report, then add `BASE` with `git reset --hard BASE` as the way to undo the run, and on `done` the path `D/pr-body.md`.
+In Orca: `orca worktree set --worktree current --comment OUTCOME`, adding, when `WT` is set and the outcome is `done`, `--workspace-status in-review` and in issue mode `--pr PR`.
+
+Done when the report is posted (issue mode) or printed (prompt mode). Tell the user the outcome and the total line printed by `REPORT report`. Issue mode: add the PR URL if any. When `WT` is set, add `WT` and `git worktree remove WT` (in Orca `orca worktree rm --worktree path:WT`) to clean up once the user is done with it. Prompt mode: first repeat the whole printed report, then add `BASE` with `git reset --hard BASE` as the way to undo the run, and on `done` the path `D/pr-body.md`.

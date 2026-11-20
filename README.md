@@ -71,10 +71,11 @@ An issue run works in its own git worktree, so your checkout stays untouched and
 The session you invoke creates the worktree and hands off to a fresh dispatcher inside it:
 
 - **In Herdr**: the worktree goes where Herdr's New worktree dialog puts it (`worktrees.directory`, default `~/.herdr/worktrees/<repo>/<branch>`) and the run starts in a new space. A resumed run opens a tab in that space.
+- **In Orca**: Orca creates the worktree (under its workspace directory, linked to the issue) and starts the run in a new agent tab. A resumed run opens a new tab in that worktree. While the run goes, the worktree comment shows the running agent (`reviewer #12 call 2`) and then the outcome; a worktree run moves to in progress on the board, and to in review with its PR linked when done.
 - **Claude Code elsewhere**: the worktree is `../<repo>.worktrees/<branch>` and the session moves into it.
 - **Copilot elsewhere**: same path; the dispatcher prints the `cd … && copilot -i …` command for you to run.
 
-Resume a worktree run from anywhere with the same command; the dispatcher finds its worktree. Worktrees are never removed for you, so you can come back with feedback; the final message gives the `git worktree remove` command.
+Resume a worktree run from anywhere with the same command; the dispatcher finds its worktree. Worktrees are never removed for you, so you can come back with feedback; the final message gives the `git worktree remove` command (`orca worktree rm` in Orca).
 
 ## What a run does
 

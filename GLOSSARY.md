@@ -29,7 +29,7 @@ The timeline and cost summary produced when a run ends, measured in the host's o
 _Avoid_: summary, metrics
 
 **Worktree**:
-A separate checkout of the target repository on the run's own branch, so the user's checkout stays untouched and runs can go in parallel. An issue run uses one by default; a prompt run works in place unless asked. In Herdr it is a Herdr worktree, shown as its own space.
+A separate checkout of the target repository on the run's own branch, so the user's checkout stays untouched and runs can go in parallel. An issue run uses one by default; a prompt run works in place unless asked. In Herdr it is a Herdr worktree, shown as its own space; in Orca it is an Orca worktree with its own agent tab.
 _Avoid_: sandbox, clone, copy
 
 **Handoff**:

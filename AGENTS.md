@@ -31,7 +31,7 @@ These were decided with the user; changing one is a design change, so raise it f
 - Keep reply words in sync across `skills/run/SKILL.md`, the last line of each `agents/*.md`, exec and review headers (`STATUS:` / `VERDICT:`), and `report.py` (`REPLY`).
 - File names `plan-k.md`, `exec-k.md`, `review-k.md`, `pr-body.md` are shared by the skill, the agents and `report.py` (`RESULT_FILE`).
 - The task file is `issue.json` (written by `report.py init`) or `task.md` (written by the dispatcher). The agent prompt lines `Issue number:`, `Task:`, `Base:` and `Plan: none` are shared by the skill and the agents.
-- `report.py init` prints `Dir:`, `Base:` and, in a linked worktree, `Worktree:`; `report.py worktree` prints `Worktree:`, `Herdr:` and `Space:`. The skill reads these lines.
+- `report.py init` prints `Dir:`, `Base:`, in a linked worktree `Worktree:`, and in an Orca worktree `Orca: yes`; `report.py worktree` prints `Worktree:`, `Herdr:` and `Space:`, or in Orca `Orca: create` with `Start:`, or `Worktree:` with `Orca: launch`. The skill reads these lines.
 - `report.py worktree` mirrors the path layout of Herdr's shipped `worktree` mod (`<worktrees.directory>/<repo>/<branch with / as ->`), so the space nests under its repo.
 - Per-role models live in the same agent file: `model:` for Claude Code, `models:`/`modelPolicy:` for Copilot.
 - `report.py` matches Claude Code metadata `agentType` and Copilot `subagent.started` `agentName` against `ROLES`.
@@ -56,6 +56,10 @@ Unverified until the first real plugin run; record the Copilot CLI version and v
 - `session.usage_record` stores model, token counts, `cost`, `duration`, `initiator`, `interactionType` and subagent `parentToolCallId` in `data.usage`. `agentId` is top-level on subagent records. Input includes cache reads/writes; output includes reasoning.
 - `subagent.started` has `agentName`, `model`, `modelSelectionSource`, `executionMode` and `toolCallId`; `subagent.configured` / `subagent.selected` describe selection. Match `tool.execution_start` / `tool.execution_complete` for `task`. Background completion of `task` can be a launch acknowledgement; `subagent.completed` marks the actual end.
 - `session.usage_checkpoint` carries `data.accountingSnapshot` rollups (`modelMetrics`, `agentMetrics`, `totalPremiumRequestCost`); use usage records for run-scoped totals.
+
+## Orca facts
+
+Verified on Orca 1.4.266: every Orca session sets `ORCA_APP_VERSION`; `orca worktree show --worktree branch:B` fails for a worktree made by `git worktree add` when the repo hides external worktrees; `worktree create --branch B` keeps `B` exactly (a taken name gets a suffix) and `--base-branch` takes a SHA. Unverified: whether `--prompt '/agent-loop:run …'` starts the skill in a new chat or terminal agent, and Copilot inside Orca.
 
 ## Working here
 

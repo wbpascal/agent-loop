@@ -221,7 +221,7 @@ class ReportTest(unittest.TestCase):
                 report.worktree(SimpleNamespace(branch=branch, base=base))
             return buf.getvalue()
 
-        env = {"HC_TERMINAL_SOCKET": ""}
+        env = {"HC_TERMINAL_SOCKET": "", "ORCA_APP_VERSION": ""}
         out = worktree("agent/issue-7", "main", env)
         path = repo.parent / "proj.worktrees" / "agent-issue-7"
         self.assertEqual(out, f"Worktree: {path.as_posix()}\nHerdr: no\n")
@@ -237,8 +237,23 @@ class ReportTest(unittest.TestCase):
         real = subprocess.check_output
         with mock.patch.object(report.subprocess, "check_output",
                                side_effect=lambda cmd, **kw: ls if cmd[0] == "herdr-app" else real(cmd, **kw)):
-            out = worktree("agent/fix", "HEAD", {"HC_TERMINAL_SOCKET": "s", "HERDR_APP_HOME": str(home)})
+            out = worktree("agent/fix", "HEAD", {"HC_TERMINAL_SOCKET": "s", "HERDR_APP_HOME": str(home),
+                                                 "ORCA_APP_VERSION": ""})
         self.assertEqual(out, f"Worktree: {herdr.as_posix()}\nHerdr: yes\nSpace: sp1\n")
+
+        def fake_orca(cmd, **kw):
+            if cmd[0] != "orca":
+                return real(cmd, **kw)
+            if cmd[1:3] == ["worktree", "current"] or cmd[4:5] == ["branch:agent/known"]:
+                return json.dumps({"ok": True, "result": {"worktree": {"path": "/orca/known"}}})
+            raise subprocess.CalledProcessError(1, cmd)
+        orca_env = {"ORCA_APP_VERSION": "1", "HC_TERMINAL_SOCKET": "s"}  # Orca wins over Herdr
+        head = real(["git", "rev-parse", "HEAD"], encoding="utf-8").strip()
+        with mock.patch.object(report.subprocess, "check_output", side_effect=fake_orca):
+            self.assertEqual(worktree("agent/new", "main", orca_env), f"Orca: create\nStart: {head}\n")
+            self.assertEqual(worktree("agent/known", env=orca_env), "Worktree: /orca/known\nOrca: launch\n")
+            # A branch Orca has no worktree for falls back to a plain git worktree.
+            self.assertEqual(worktree("agent/issue-7", env=orca_env), f"Worktree: {path.as_posix()}\nHerdr: no\n")
 
         os.chdir(path)
         d = Path(".agent-loop/7")
